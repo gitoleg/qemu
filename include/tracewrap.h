@@ -45,7 +45,6 @@ OperandInfo * load_store_mem(target_ulong addr, target_ulong val, int ls, int le
 
 void *state(void);
 void set_state(void *state);
-void init_state(uint64_t size);
 
 #define REG_EFLAGS 66
 #define REG_LO 33
