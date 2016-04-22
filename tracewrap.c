@@ -32,12 +32,6 @@ static uint64_t toc_num_frames = 0;
 static guchar target_md5[MD5LEN];
 static char target_path[PATH_MAX] = "unknown";
 
-static void *target_state;
-
-void *state(void)  { return target_state; }   
-void set_state(void *state) { target_state = state; }
-
-
 #define WRITE(x) do {                                   \
         if (!file)                                      \
             err(1, "qemu_trace is not initialized");    \
@@ -56,7 +50,6 @@ void set_state(void *state) { target_state = state; }
         if (fseek(file,(off), SEEK_SET) < 0)    \
             err(1, "stream not seekable");      \
     } while(0)
-
 
 static void toc_init(void) {
     if (toc_entries != 0)
