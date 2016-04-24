@@ -6,7 +6,7 @@
 #include "tracewrap.h"
 #include "qemu/log.h"
 
-static const char* const regs[CPU_NB_REGS] = {
+static const char* const regs[] = {
 #ifdef TARGET_X86_64
     [R_EAX] = "RAX",
     [R_EBX] = "RBX",
@@ -36,8 +36,7 @@ static const char* const regs[CPU_NB_REGS] = {
 #endif
 };
 
-#define CPU_NB_SEGS 6
-static const char* const segs[CPU_NB_SEGS] = {
+static const char* const segs[] = {
     [R_ES] = "ES_BASE",
     [R_CS] = "CS_BASE",
     [R_SS] = "SS_BASE",
@@ -53,9 +52,9 @@ static const char * const flag_bits[] = {
     [CC_O] = "VF"
 };
 
-static const int cpu_nb_flag_regs = sizeof(flag_bits)/sizeof(flag_bits[0]);
-
-static target_ulong old_flags = 0;
+static const target_ulong cpu_nb_regs = sizeof(regs)/sizeof(regs[0]);
+static const target_ulong cpu_nb_segs = sizeof(segs)/sizeof(segs[0]);
+static const target_ulong cpu_nb_flag_regs = sizeof(flag_bits)/sizeof(flag_bits[0]);
 
 void HELPER(trace_newframe)(target_ulong pc)
 {
@@ -76,9 +75,9 @@ OperandInfo * load_store_reg(target_ulong reg, target_ulong val, int ls) {
 
     const char* reg_name = NULL;
     if (isSeg) {
-        reg_name = reg < CPU_NB_SEGS ? segs[reg] : "<UNDEF>";
+        reg_name = reg < cpu_nb_segs ? segs[reg] : "<UNDEF>";
     } else {
-        reg_name = reg < CPU_NB_REGS ? regs[reg] :
+        reg_name = reg < cpu_nb_regs ? regs[reg] :
 #ifdef TARGET_X86_64
         "RFLAGS";
 #else
@@ -100,8 +99,7 @@ OperandInfo * load_store_reg(target_ulong reg, target_ulong val, int ls) {
     }
     OperandInfo *oi = g_new(OperandInfo,1);
     operand_info__init(oi);
-    oi->bit_length = 0;
-    /* oi->bit_length = sizeof(val) * 8; */
+    oi->bit_length = sizeof(val) * 8;
     oi->operand_info_specific = ois;
     oi->operand_usage = ou;
     oi->value.len = sizeof(val);
@@ -187,12 +185,11 @@ void HELPER(trace_st)(CPUArchState *env, target_ulong val, target_ulong addr)
 }
 
 
-static OperandInfo * store_flag(short val, target_ulong bit)
+static OperandInfo * store_flag(bool val, target_ulong bit)
 {
     RegOperand * ro = g_new(RegOperand, 1);
     reg_operand__init(ro);     
-    const char* reg_name = flag_bits[bit];
-    ro->name = g_strdup(reg_name);
+    ro->name = g_strdup(flag_bits[bit]);
 
     OperandInfoSpecific *ois = g_new(OperandInfoSpecific, 1);
     operand_info_specific__init(ois);
@@ -203,33 +200,32 @@ static OperandInfo * store_flag(short val, target_ulong bit)
     ou->written = 1;
     OperandInfo *oi = g_new(OperandInfo, 1);
     operand_info__init(oi);
-    oi->bit_length = 1;
+    oi->bit_length = sizeof(val);
     oi->operand_info_specific = ois;
     oi->operand_usage = ou;
-    oi->value.len = 1;
+    oi->value.len = sizeof(val);
     oi->value.data = g_malloc(oi->value.len);
-    memcpy(oi->value.data, &val, 1);
+    memcpy(oi->value.data, &val, sizeof(val));
     return oi;
 }
 
-static bool is_flag_changed(target_ulong flags, target_ulong mask) {
+static bool is_flag_changed(target_ulong old_flags, target_ulong flags, target_ulong mask) {
     return (old_flags & mask) != (flags & mask);
 }
 
-static void store_if_changed(target_ulong flags, target_ulong mask) {
-    if (is_flag_changed(flags, mask)) {
+static void store_if_changed(target_ulong old_flags, target_ulong flags, target_ulong mask) {
+    if (is_flag_changed(old_flags, flags, mask)) {
         OperandInfo *oi = store_flag((flags & mask), mask);
         qemu_trace_add_operand(oi, 0x2);
     }
 }
 
 void HELPER(trace_store_eflags)(CPUArchState *env) {
+    static target_ulong old_flags = 0;
     target_ulong flags = cpu_compute_eflags(env);
+    store_if_changed(old_flags, flags, CC_C);
+    store_if_changed(old_flags, flags, CC_O);
+    store_if_changed(old_flags, flags, CC_Z);
+    store_if_changed(old_flags, flags, CC_S);
     old_flags = flags;
-    store_if_changed(flags, CC_C);
-    store_if_changed(flags, CC_O);
-    store_if_changed(flags, CC_Z);
-    store_if_changed(flags, CC_S);
-    /* OperandInfo *oi = load_store_reg(REG_EFLAGS, flags, 1); */
-    /* qemu_trace_add_operand(oi, 0x2); */
 }
